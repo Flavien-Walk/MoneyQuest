@@ -377,6 +377,29 @@ export const homeStyles = StyleSheet.create({
     gap: 8,
   },
 
+  // === ACTIONS HEADER ACTUALITÉS ===
+  newsHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  refreshButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+
   seeAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -387,6 +410,15 @@ export const homeStyles = StyleSheet.create({
     fontSize: 14,
     color: '#3b82f6',
     fontWeight: '600',
+  },
+
+  // === INDICATEUR DE MISE À JOUR ===
+  lastUpdateText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+    marginBottom: 12,
+    textAlign: 'center',
   },
 
   // === CARROUSEL D'ACTUALITÉS ===
@@ -475,6 +507,70 @@ export const homeStyles = StyleSheet.create({
     fontWeight: '500',
   },
 
+  // === GESTION D'ERREURS ACTUALITÉS ===
+  newsErrorContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+
+  newsErrorIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fef2f2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+
+  newsErrorTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#dc2626',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+
+  newsErrorMessage: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+    fontWeight: '500',
+  },
+
+  // === BOUTON DE RÉESSAI ===
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    shadowColor: '#3b82f6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  retryButtonText: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+
   // === PLACEHOLDER ACTUALITÉS ===
   newsPlaceholder: {
     backgroundColor: '#ffffff',
@@ -514,6 +610,7 @@ export const homeStyles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     fontWeight: '500',
+    marginBottom: 16,
   },
 
   // === ESPACEMENT ===

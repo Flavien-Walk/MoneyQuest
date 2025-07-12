@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -26,11 +26,13 @@ import {
   X,
   Bitcoin,
   Building2,
-  TrendingDown
+  TrendingDown,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react-native';
 import { homeStyles } from '../styles/HomeStyle';
 import AssetDetails from '../components/AssetsDetails';
-import NewsReader from '../components/Newsreader';
+import NewsReader from '../components/NewsReader';
 import NewsList from '../components/NewsList';
 
 // Configuration API
@@ -86,6 +88,7 @@ interface AssetForDetails {
 
 const Home: React.FC = () => {
   const router = useRouter();
+  const newsLoadingRef = useRef(false);
   
   // États pour la recherche
   const [searchQuery, setSearchQuery] = useState('');
@@ -103,6 +106,8 @@ const Home: React.FC = () => {
   const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
   const [showNewsReader, setShowNewsReader] = useState(false);
   const [showNewsList, setShowNewsList] = useState(false);
+  const [newsError, setNewsError] = useState<string | null>(null);
+  const [lastNewsUpdate, setLastNewsUpdate] = useState<Date | null>(null);
 
   // Assets populaires
   const popularAssets = [
@@ -119,100 +124,152 @@ const Home: React.FC = () => {
     { symbol: 'GBPUSD', name: 'British Pound / US Dollar', type: 'forex' as const, id: 'GBPUSD' },
   ];
 
-  // Chargement des actualités
-  const loadFinancialNews = async () => {
+  // Interface pour les articles bruts de l'API
+  interface RawNewsArticle {
+    title?: string;
+    description?: string;
+    content?: string;
+    url?: string;
+    urlToImage?: string;
+    publishedAt?: string;
+    source?: {
+      name?: string;
+    };
+  }
+
+  // Fonction pour nettoyer et valider les articles
+  const validateAndCleanArticle = (article: RawNewsArticle, index: number): NewsArticle | null => {
+    if (!article.title || !article.description || !article.source?.name) {
+      console.log(`❌ Article ${index} invalide: manque title/description/source`);
+      return null;
+    }
+
+    // Filtrer les articles supprimés ou invalides de manière plus souple
+    const removedPatterns = ['[removed]', 'removed', '[deleted]', 'deleted'];
+    const hasRemovedContent = removedPatterns.some(pattern => 
+      (article.title?.toLowerCase().includes(pattern)) || 
+      (article.description?.toLowerCase().includes(pattern))
+    );
+    
+    if (hasRemovedContent) {
+      console.log(`❌ Article ${index} supprimé: contenu removed/deleted`);
+      return null;
+    }
+
+    // Accepter les articles même sans image
+    const articleId = `${article.publishedAt || Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`;
+
+    return {
+      id: articleId,
+      title: article.title.trim(),
+      description: article.description.trim(),
+      content: article.content?.trim() || article.description.trim(),
+      url: article.url || '',
+      urlToImage: article.urlToImage || '', // Garder même si vide
+      publishedAt: article.publishedAt || new Date().toISOString(),
+      source: {
+        name: article.source.name.trim()
+      }
+    };
+  };
+
+  // Interface pour les données de l'API NewsAPI
+  interface NewsAPIResponse {
+    status: string;
+    code?: string;
+    message?: string;
+    articles?: RawNewsArticle[];
+  }
+
+  // Chargement des actualités financières réelles - VERSION SIMPLIFIÉE
+  const loadFinancialNews = useCallback(async (forceRefresh = false) => {
+    // Éviter les doubles appels
+    if (newsLoadingRef.current) {
+      console.log('🚫 Chargement déjà en cours, annulé');
+      return;
+    }
+
+    // Éviter les requêtes trop fréquentes (max 1 par minute)
+    if (!forceRefresh && lastNewsUpdate && Date.now() - lastNewsUpdate.getTime() < 60000) {
+      console.log('⏳ Actualités récentes, pas de rechargement nécessaire');
+      return;
+    }
+
+    newsLoadingRef.current = true;
     setIsLoadingNews(true);
+    setNewsError(null);
+
     try {
+      console.log('🔄 Chargement des actualités financières...');
+      
+      // Requête simplifiée et plus large
       const response = await fetch(
         `${API_CONFIG.NEWS_API.baseUrl}/everything?` +
-        `q=(finance OR économie OR bourse OR crypto OR bitcoin OR "marché financier" OR "actions" OR "investissement")&` +
+        `q=finance OR crypto OR bitcoin OR bourse&` +
         `language=fr&` +
         `sortBy=publishedAt&` +
-        `pageSize=15&` +
+        `pageSize=30&` +
+        `from=${new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()}&` + // Dernières 48h
         `apiKey=${API_CONFIG.NEWS_API.key}`
       );
 
       if (!response.ok) {
-        throw new Error(`Erreur API NewsAPI: ${response.status}`);
+        throw new Error(`Erreur HTTP: ${response.status} - ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data: NewsAPIResponse = await response.json();
       
       if (data.status === 'error') {
-        throw new Error(data.message || 'Erreur NewsAPI');
+        throw new Error(data.message || `Erreur API NewsAPI: ${data.code || 'Inconnue'}`);
       }
-      
-      const formattedArticles: NewsArticle[] = (data.articles || [])
-        .filter((article: any) => 
-          article.title && 
-          article.description && 
-          article.urlToImage &&
-          !article.title.includes('[Removed]') &&
-          !article.description.includes('[Removed]') &&
-          article.urlToImage !== null
-        )
-        .map((article: any, index: number) => ({
-          id: `${article.publishedAt}-${index}`,
-          title: article.title,
-          description: article.description,
-          content: article.content || article.description,
-          url: article.url,
-          urlToImage: article.urlToImage,
-          publishedAt: article.publishedAt,
-          source: {
-            name: article.source.name || 'Actualités'
-          }
-        }))
-        .slice(0, 10);
 
-      console.log(`✅ ${formattedArticles.length} actualités financières chargées`);
-      setNewsArticles(formattedArticles);
-      
+      console.log(`📰 API Response: ${data.articles?.length || 0} articles bruts reçus`);
+
+      if (!data.articles || !Array.isArray(data.articles) || data.articles.length === 0) {
+        throw new Error('Aucun article retourné par l\'API');
+      }
+
+      // Validation plus permissive
+      const validArticles = data.articles
+        .map((article: RawNewsArticle, index: number) => validateAndCleanArticle(article, index))
+        .filter((article): article is NewsArticle => article !== null);
+
+      console.log(`✅ ${validArticles.length} articles validés sur ${data.articles.length}`);
+
+      if (validArticles.length === 0) {
+        throw new Error('Aucun article valide après filtrage');
+      }
+
+      // Trier par date de publication (plus récent en premier)
+      const sortedArticles = validArticles.sort((a: NewsArticle, b: NewsArticle) => 
+        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+      );
+
+      // Limiter à 15 articles
+      const finalArticles = sortedArticles.slice(0, 15);
+
+      console.log(`✅ ${finalArticles.length} actualités financières chargées`);
+      setNewsArticles(finalArticles);
+      setLastNewsUpdate(new Date());
+      setNewsError(null);
+
     } catch (error) {
-      console.error('Erreur actualités NewsAPI:', error);
+      console.error('❌ Erreur lors du chargement des actualités:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      setNewsError(errorMessage);
       
-      const demoArticles: NewsArticle[] = [
-        {
-          id: 'demo-1',
-          title: 'Bitcoin franchit un nouveau cap historique à 100 000€',
-          description: 'La cryptomonnaie continue sa progression fulgurante sur les marchés internationaux avec une hausse de 15% cette semaine.',
-          content: 'Bitcoin a atteint de nouveaux sommets cette semaine, porté par l\'adoption institutionnelle croissante...',
-          url: 'https://example.com/bitcoin-news',
-          urlToImage: 'https://images.unsplash.com/photo-1621761191319-c6fb62004040?w=400&h=300&fit=crop&q=80',
-          publishedAt: new Date().toISOString(),
-          source: { name: 'Crypto News France' }
-        },
-        {
-          id: 'demo-2',
-          title: 'CAC 40 : Les marchés européens terminent en hausse',
-          description: 'Une semaine positive pour les indices boursiers européens avec des gains significatifs sur le CAC 40 (+2.1%).',
-          content: 'Les investisseurs européens ont montré un optimisme renouvelé cette semaine...',
-          url: 'https://example.com/cac40-news',
-          urlToImage: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=300&fit=crop&q=80',
-          publishedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          source: { name: 'Les Échos' }
-        },
-        {
-          id: 'demo-3',
-          title: 'Tesla : Résultats exceptionnels au T4',
-          description: 'Les ventes de véhicules électriques de Tesla au quatrième trimestre ont largement dépassé les prévisions.',
-          content: 'Tesla a annoncé des résultats exceptionnels pour le quatrième trimestre...',
-          url: 'https://example.com/tesla-news',
-          urlToImage: 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=400&h=300&fit=crop&q=80',
-          publishedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-          source: { name: 'BFM Business' }
-        }
-      ];
-      
-      console.log('📰 Utilisation des actualités de démonstration');
-      setNewsArticles(demoArticles);
+      // Si on a déjà des articles, on les garde
+      if (newsArticles.length === 0) {
+        setNewsArticles([]);
+      }
     } finally {
       setIsLoadingNews(false);
+      newsLoadingRef.current = false;
     }
-  };
+  }, [lastNewsUpdate, newsArticles.length]);
 
-  // Recherche d'assets
-  const performSearch = async (query: string) => {
+  // Recherche d'assets avec debounce optimisé
+  const performSearch = useCallback(async (query: string) => {
     if (query.length < 2) {
       setSearchResults([]);
       return;
@@ -227,7 +284,7 @@ const Home: React.FC = () => {
         asset.name.toLowerCase().includes(query.toLowerCase())
       );
 
-      for (const asset of popularMatches) {
+      for (const asset of popularMatches.slice(0, 8)) { // Limiter à 8 résultats
         try {
           let assetData: SearchResult = {
             id: asset.id,
@@ -249,6 +306,7 @@ const Home: React.FC = () => {
 
           results.push(assetData);
         } catch (error) {
+          // Ajouter même sans prix pour garder la recherche fonctionnelle
           results.push({
             id: asset.id,
             name: asset.name,
@@ -264,9 +322,9 @@ const Home: React.FC = () => {
     } finally {
       setIsSearching(false);
     }
-  };
+  }, []);
 
-  // Fonctions de recherche API
+  // Fonctions de recherche API (inchangées)
   const fetchCryptoSearchData = async (symbol: string) => {
     const symbolMapping: { [key: string]: string } = {
       'BTC': 'bitcoin', 'ETH': 'ethereum', 'BNB': 'binancecoin',
@@ -322,7 +380,7 @@ const Home: React.FC = () => {
         volume_24h: parseFloat(data.volume) || undefined
       };
     } catch (error) {
-      console.warn(`Rate limit pour ${symbol}, utilisation de données par défaut`);
+      console.warn(`Rate limit pour ${symbol}`);
       return {};
     }
   };
@@ -351,7 +409,7 @@ const Home: React.FC = () => {
         price_change_percentage_24h: changePercent24h
       };
     } catch (error) {
-      console.warn(`Rate limit pour ${symbol}, utilisation de données par défaut`);
+      console.warn(`Rate limit pour ${symbol}`);
       return {};
     }
   };
@@ -369,11 +427,31 @@ const Home: React.FC = () => {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [searchQuery]);
+  }, [searchQuery, performSearch]);
 
-  // Charger les actualités au démarrage
+  // Charger les actualités au démarrage - UNE SEULE FOIS
   useEffect(() => {
-    loadFinancialNews();
+    let mounted = true;
+    
+    const initializeNews = async () => {
+      if (mounted) {
+        await loadFinancialNews();
+      }
+    };
+    
+    initializeNews();
+    
+    // Actualiser les actualités toutes les 10 minutes (plus raisonnable)
+    const interval = setInterval(() => {
+      if (mounted) {
+        loadFinancialNews();
+      }
+    }, 10 * 60 * 1000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   // Gestionnaires d'événements
@@ -408,14 +486,17 @@ const Home: React.FC = () => {
     const date = new Date(dateString);
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
-    const diffHours = Math.ceil(diffTime / (1000 * 60 * 60));
+    const diffMinutes = Math.floor(diffTime / (1000 * 60));
     
-    if (diffHours < 1) {
+    if (diffMinutes < 1) {
       return 'À l\'instant';
-    } else if (diffHours < 24) {
+    } else if (diffMinutes < 60) {
+      return `${diffMinutes}min`;
+    } else if (diffMinutes < 1440) {
+      const diffHours = Math.floor(diffMinutes / 60);
       return `${diffHours}h`;
     } else {
-      const diffDays = Math.floor(diffHours / 24);
+      const diffDays = Math.floor(diffMinutes / 1440);
       return `${diffDays}j`;
     }
   };
@@ -433,6 +514,10 @@ const Home: React.FC = () => {
     setShowNewsList(false);
     setSelectedArticle(article);
     setShowNewsReader(true);
+  };
+
+  const handleRefreshNews = () => {
+    loadFinancialNews(true);
   };
 
   // Fonctions utilitaires
@@ -469,7 +554,7 @@ const Home: React.FC = () => {
   };
 
   const handleViewProfile = () => {
-    console.log('Navigation vers le profil');
+    router.push('/profile');
   };
 
   const handleViewShop = () => {
@@ -680,16 +765,57 @@ const Home: React.FC = () => {
               <Newspaper size={20} color="#1e293b" strokeWidth={2} />
               <Text style={homeStyles.sectionTitle}>Actualités</Text>
             </View>
-            <TouchableOpacity style={homeStyles.seeAllButton} onPress={handleViewAllNews}>
-              <Text style={homeStyles.seeAllText}>Voir tout</Text>
-              <ChevronRight size={16} color="#3b82f6" strokeWidth={2} />
-            </TouchableOpacity>
+            <View style={homeStyles.newsHeaderActions}>
+              <TouchableOpacity 
+                style={homeStyles.refreshButton} 
+                onPress={handleRefreshNews}
+                disabled={isLoadingNews}
+              >
+                <RefreshCw 
+                  size={16} 
+                  color={isLoadingNews ? "#94a3b8" : "#3b82f6"} 
+                  strokeWidth={2}
+                  style={isLoadingNews ? { opacity: 0.5 } : {}}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity style={homeStyles.seeAllButton} onPress={handleViewAllNews}>
+                <Text style={homeStyles.seeAllText}>Voir tout</Text>
+                <ChevronRight size={16} color="#3b82f6" strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
           </View>
+          
+          {/* Indicateur de dernière mise à jour */}
+          {lastNewsUpdate && !isLoadingNews && (
+            <Text style={homeStyles.lastUpdateText}>
+              Dernière mise à jour: {getTimeAgo(lastNewsUpdate.toISOString())}
+            </Text>
+          )}
           
           {isLoadingNews ? (
             <View style={homeStyles.newsLoadingContainer}>
               <ActivityIndicator size="small" color="#3b82f6" />
               <Text style={homeStyles.newsLoadingText}>Chargement des actualités...</Text>
+            </View>
+          ) : newsError ? (
+            <View style={homeStyles.newsErrorContainer}>
+              <View style={homeStyles.newsErrorIconContainer}>
+                <AlertCircle size={24} color="#ef4444" strokeWidth={2} />
+              </View>
+              <Text style={homeStyles.newsErrorTitle}>Problème de connexion</Text>
+              <Text style={homeStyles.newsErrorMessage}>
+                {newsError.includes('Network') ? 
+                  'Vérifiez votre connexion internet' : 
+                  'Service temporairement indisponible'
+                }
+              </Text>
+              <TouchableOpacity 
+                style={homeStyles.retryButton} 
+                onPress={() => loadFinancialNews(true)}
+              >
+                <RefreshCw size={16} color="#ffffff" strokeWidth={2} />
+                <Text style={homeStyles.retryButtonText}>Réessayer</Text>
+              </TouchableOpacity>
             </View>
           ) : newsArticles.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={homeStyles.newsCarousel}>
@@ -700,12 +826,19 @@ const Home: React.FC = () => {
                   onPress={() => openNewsReader(article)}
                   activeOpacity={0.8}
                 >
-                  {article.urlToImage && (
+                  {article.urlToImage ? (
                     <Image
                       source={{ uri: article.urlToImage }}
                       style={homeStyles.newsImage}
                       resizeMode="cover"
+                      onError={(error) => {
+                        console.warn('Erreur de chargement image:', error.nativeEvent.error);
+                      }}
                     />
+                  ) : (
+                    <View style={[homeStyles.newsImage, { backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }]}>
+                      <Newspaper size={32} color="#94a3b8" strokeWidth={1.5} />
+                    </View>
                   )}
                   <View style={homeStyles.newsCardContent}>
                     <View style={homeStyles.newsCardHeader}>
@@ -728,11 +861,18 @@ const Home: React.FC = () => {
                 <Newspaper size={32} color="#94a3b8" strokeWidth={1.5} />
               </View>
               <Text style={homeStyles.newsPlaceholderTitle}>
-                Les dernières actualités financières
+                Actualités temporairement indisponibles
               </Text>
               <Text style={homeStyles.newsPlaceholderSubtitle}>
-                Restez informé des mouvements du marché en temps réel
+                Les dernières actualités financières seront bientôt disponibles
               </Text>
+              <TouchableOpacity 
+                style={homeStyles.retryButton} 
+                onPress={() => loadFinancialNews(true)}
+              >
+                <RefreshCw size={16} color="#ffffff" strokeWidth={2} />
+                <Text style={homeStyles.retryButtonText}>Recharger</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -763,7 +903,7 @@ const Home: React.FC = () => {
         visible={showNewsList}
         onClose={() => setShowNewsList(false)}
         onArticlePress={handleNewsListArticlePress}
-        onRefresh={loadFinancialNews}
+        onRefresh={handleRefreshNews}
         isRefreshing={isLoadingNews}
       />
     </View>
