@@ -182,7 +182,7 @@ const Market: React.FC = () => {
         const stock = POPULAR_STOCKS[i];
         
         try {
-          console.log(`📈 Récupération de ${stock.symbol}...`);
+          console.log(`Récupération de ${stock.symbol}...`);
           
           const url = `${YAHOO_FINANCE_API}/${stock.symbol}`;
           
