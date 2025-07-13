@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Mail, Lock, ArrowRight, Eye, EyeOff, TrendingUp } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loginStyles } from '../styles/LoginStyle';
 
 const API_URL = 'http://192.168.1.73:5000';
@@ -11,12 +12,16 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
-  // Refs pour éviter les re-renders
+  const [isLoading, setIsLoading] = useState(false);
+
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
 
   const handleLogin = async () => {
+    if (isLoading) return;
+    
+    setIsLoading(true);
+    
     try {
       const response = await fetch(`${API_URL}/login`, {
         method: 'POST',
@@ -27,6 +32,11 @@ const Login: React.FC = () => {
       const data = await response.json();
 
       if (response.ok) {
+        // ✅ Sauvegarde token et userId
+        await AsyncStorage.setItem('authToken', data.token);
+        await AsyncStorage.setItem('userId', data.user.id.toString());
+
+        console.log('✅ Connexion réussie - Token et userId sauvegardés');
         router.push('/home');
       } else {
         Alert.alert('Erreur de connexion', data.error || 'Email ou mot de passe incorrect.');
@@ -34,6 +44,8 @@ const Login: React.FC = () => {
     } catch (error) {
       console.error('Erreur lors de la connexion:', error);
       Alert.alert('Erreur', 'Impossible de se connecter au serveur.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -78,7 +90,7 @@ const Login: React.FC = () => {
           </Text>
         </View>
 
-        {/* Form */}
+        {/* Formulaire */}
         <View style={loginStyles.form}>
           <View style={loginStyles.inputGroup}>
             <Text style={loginStyles.label}>Email</Text>
@@ -95,6 +107,7 @@ const Login: React.FC = () => {
                 autoCorrect={false}
                 placeholderTextColor="#94a3b8"
                 returnKeyType="next"
+                editable={!isLoading}
                 onSubmitEditing={() => passwordRef.current?.focus()}
               />
             </View>
@@ -115,9 +128,10 @@ const Login: React.FC = () => {
                 autoCorrect={false}
                 placeholderTextColor="#94a3b8"
                 returnKeyType="done"
+                editable={!isLoading}
                 onSubmitEditing={isFormValid ? handleLogin : undefined}
               />
-              <TouchableOpacity onPress={togglePasswordVisibility}>
+              <TouchableOpacity onPress={togglePasswordVisibility} disabled={isLoading}>
                 {showPassword ? (
                   <EyeOff size={18} color="#94a3b8" strokeWidth={2} />
                 ) : (
@@ -134,29 +148,39 @@ const Login: React.FC = () => {
             ]}
             onPress={handleLogin}
             activeOpacity={0.9}
-            disabled={!isFormValid}
+            disabled={!isFormValid || isLoading}
           >
-            <Text style={loginStyles.loginButtonText}>Se connecter</Text>
-            <ArrowRight size={18} color="#ffffff" strokeWidth={2.5} />
+            <Text style={loginStyles.loginButtonText}>
+              {isLoading ? 'Connexion...' : 'Se connecter'}
+            </Text>
+            {!isLoading && <ArrowRight size={18} color="#ffffff" strokeWidth={2.5} />}
           </TouchableOpacity>
 
-          <TouchableOpacity style={loginStyles.forgotPassword}>
+          <TouchableOpacity style={loginStyles.forgotPassword} disabled={isLoading}>
             <Text style={loginStyles.forgotPasswordText}>
               Mot de passe oublié ?
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Alternatives */}
+        {/* Actions secondaires */}
         <View style={loginStyles.alternativeActions}>
           <Text style={loginStyles.registerPrompt}>Pas encore de compte ?</Text>
 
-          <TouchableOpacity style={loginStyles.registerButton} onPress={handleRegister}>
+          <TouchableOpacity 
+            style={loginStyles.registerButton} 
+            onPress={handleRegister}
+            disabled={isLoading}
+          >
             <Text style={loginStyles.registerText}>Créer un compte gratuit</Text>
             <ArrowRight size={16} color="#10b981" strokeWidth={2} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={loginStyles.demoButton} onPress={handleContinueWithoutAccount}>
+          <TouchableOpacity 
+            style={loginStyles.demoButton} 
+            onPress={handleContinueWithoutAccount}
+            disabled={isLoading}
+          >
             <Text style={loginStyles.demoText}>Continuer sans compte</Text>
           </TouchableOpacity>
         </View>

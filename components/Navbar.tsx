@@ -3,9 +3,62 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Home, BarChart3, Users, User } from 'lucide-react-native';
 
+// === DESIGN TOKENS ===
+const tokens = {
+  colors: {
+    primary: '#3b82f6',
+    primaryLight: '#dbeafe',
+    secondary: '#6366f1',
+    
+    // Surfaces
+    surface: '#ffffff',
+    background: '#f8fafc',
+    
+    // Text
+    textPrimary: '#1e293b',
+    textSecondary: '#64748b',
+    textMuted: '#94a3b8',
+    
+    // Borders
+    border: '#e2e8f0',
+    borderLight: '#f1f5f9',
+    
+    // States
+    active: '#3b82f6',
+    inactive: '#64748b',
+  },
+  
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 20,
+    '2xl': 24,
+    '3xl': 32,
+  },
+  
+  radius: {
+    md: 12,
+    lg: 16,
+    xl: 20,
+    '2xl': 24,
+  },
+  
+  shadows: {
+    navbar: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -8 },
+      shadowOpacity: 0.1,
+      shadowRadius: 16,
+      elevation: 12,
+    },
+  },
+};
+
 /**
  * Composant de navigation moderne
- * Barre de navigation avec icônes vectorielles clean
+ * Barre de navigation avec icônes vectorielles clean et design tokens
  */
 const Navbar: React.FC = () => {
   const router = useRouter();
@@ -23,7 +76,7 @@ const Navbar: React.FC = () => {
   };
 
   const handleProfilePress = () => {
-    console.log('Navigation vers le profil');
+    router.push('/profile');
   };
 
   return (
@@ -34,7 +87,7 @@ const Navbar: React.FC = () => {
         activeOpacity={0.7}
       >
         <View style={styles.iconContainer}>
-          <Home size={22} color="#64748b" strokeWidth={2} />
+          <Home size={22} color={tokens.colors.inactive} strokeWidth={2} />
         </View>
         <Text style={styles.navLabel}>Accueil</Text>
       </TouchableOpacity>
@@ -45,7 +98,7 @@ const Navbar: React.FC = () => {
         activeOpacity={0.7}
       >
         <View style={styles.iconContainer}>
-          <BarChart3 size={22} color="#64748b" strokeWidth={2} />
+          <BarChart3 size={22} color={tokens.colors.inactive} strokeWidth={2} />
         </View>
         <Text style={styles.navLabel}>Marché</Text>
       </TouchableOpacity>
@@ -56,7 +109,7 @@ const Navbar: React.FC = () => {
         activeOpacity={0.7}
       >
         <View style={styles.iconContainer}>
-          <Users size={22} color="#64748b" strokeWidth={2} />
+          <Users size={22} color={tokens.colors.inactive} strokeWidth={2} />
         </View>
         <Text style={styles.navLabel}>Groupes</Text>
       </TouchableOpacity>
@@ -67,7 +120,7 @@ const Navbar: React.FC = () => {
         activeOpacity={0.7}
       >
         <View style={styles.iconContainer}>
-          <User size={22} color="#64748b" strokeWidth={2} />
+          <User size={22} color={tokens.colors.inactive} strokeWidth={2} />
         </View>
         <Text style={styles.navLabel}>Profil</Text>
       </TouchableOpacity>
@@ -82,35 +135,31 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'row',
-    backgroundColor: '#ffffff',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    paddingBottom: 24,
+    backgroundColor: tokens.colors.surface,
+    paddingVertical: tokens.spacing.lg,
+    paddingHorizontal: tokens.spacing.xl,
+    paddingBottom: tokens.spacing['2xl'],
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-    elevation: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -8,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopColor: tokens.colors.borderLight,
+    borderTopLeftRadius: tokens.radius['2xl'],
+    borderTopRightRadius: tokens.radius['2xl'],
+    ...tokens.shadows.navbar,
   },
+  
   navItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
+    paddingVertical: tokens.spacing.sm,
   },
+  
   iconContainer: {
-    marginBottom: 6,
+    marginBottom: tokens.spacing.xs + 2,
   },
+  
   navLabel: {
     fontSize: 11,
-    color: '#64748b',
+    color: tokens.colors.inactive,
     fontWeight: '600',
     letterSpacing: 0.2,
   },

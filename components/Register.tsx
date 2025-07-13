@@ -2,58 +2,74 @@ import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { User, Mail, Lock, ArrowRight, Eye, EyeOff, TrendingUp, Gift, Zap, Star } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { registerStyles } from '../styles/RegisterStyle';
+
+const API_URL = 'http://192.168.1.73:5000';
 
 const Register: React.FC = () => {
   const router = useRouter();
   const [firstName, setFirstName] = useState('');
+  const [pseudo, setPseudo] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
-  // Refs pour navigation entre champs
+  const [isLoading, setIsLoading] = useState(false);
+
   const firstNameRef = useRef<TextInput>(null);
+  const pseudoRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
 
-  // Calcul du score de progression
   const getProgressScore = () => {
     let score = 0;
-    if (firstName.length > 0) score += 33;
-    if (email.includes('@') && email.includes('.')) score += 33;
-    if (password.length >= 6) score += 34;
+    if (firstName.length > 0) score += 25;
+    if (pseudo.length > 0) score += 25;
+    if (email.includes('@') && email.includes('.')) score += 25;
+    if (password.length >= 6) score += 25;
     return score;
   };
 
   const progressScore = getProgressScore();
-  const isFormComplete = firstName.length > 0 && email.includes('@') && email.includes('.') && password.length >= 6;
+  const isFormComplete = firstName.length > 0 && pseudo.length > 0 && email.includes('@') && email.includes('.') && password.length >= 6;
 
   const handleRegister = async () => {
+    if (isLoading || !isFormComplete) return;
+    
+    setIsLoading(true);
+    
     try {
-      const response = await fetch('http://192.168.1.73:5000/register', {
+      const response = await fetch(`${API_URL}/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ firstName, email, password })
+        body: JSON.stringify({ firstName, pseudo, email, password })
       });
 
       const data = await response.json();
 
       if (response.ok) {
+        // ✅ Stocker le token + userId
+        await AsyncStorage.setItem('authToken', data.token);
+        await AsyncStorage.setItem('userId', data.user.id.toString());
+
+        console.log('✅ Inscription réussie - Token et userId sauvegardés');
         Alert.alert('Succès', 'Compte créé avec succès 🎉');
         router.push('/home');
       } else {
-        Alert.alert('Erreur', data.error || 'Erreur lors de l inscription.');
+        Alert.alert('Erreur', data.error || 'Erreur lors de l\'inscription.');
       }
     } catch (error) {
-      console.error('Erreur lors de l inscription:', error);
+      console.error('Erreur lors de l\'inscription:', error);
       Alert.alert('Erreur', 'Impossible de se connecter au serveur.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleBackToLogin = () => {
-    router.push('/home');
+    router.push('/login');
   };
 
   const togglePasswordVisibility = () => {
@@ -62,7 +78,7 @@ const Register: React.FC = () => {
 
   return (
     <View style={registerStyles.container}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={registerStyles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
@@ -73,7 +89,7 @@ const Register: React.FC = () => {
           keyboardShouldPersistTaps="always"
           bounces={true}
         >
-          {/* Header avec proposition de valeur */}
+          {/* Header */}
           <View style={registerStyles.header}>
             <View style={registerStyles.brandContainer}>
               <View style={registerStyles.logoIcon}>
@@ -81,7 +97,7 @@ const Register: React.FC = () => {
               </View>
               <Text style={registerStyles.brandName}>MoneyQuest</Text>
             </View>
-            
+
             <View style={registerStyles.valueProposition}>
               <Text style={registerStyles.title}>Rejoignez l'élite des investisseurs ! 🚀</Text>
               <Text style={registerStyles.subtitle}>
@@ -90,29 +106,21 @@ const Register: React.FC = () => {
               </Text>
             </View>
 
-            {/* Barre de progression gamifiée */}
             <View style={registerStyles.progressContainer}>
               <View style={registerStyles.progressHeader}>
                 <Text style={registerStyles.progressLabel}>Progression de l'inscription</Text>
                 <Text style={registerStyles.progressScore}>{progressScore}%</Text>
               </View>
               <View style={registerStyles.progressBar}>
-                <View 
-                  style={[
-                    registerStyles.progressFill, 
-                    { width: `${progressScore}%` }
-                  ]} 
-                />
+                <View style={[registerStyles.progressFill, { width: `${progressScore}%` }]} />
               </View>
             </View>
           </View>
 
-          {/* Formulaire avec feedback visuel */}
+          {/* Formulaire */}
           <View style={registerStyles.form}>
             <View style={registerStyles.inputGroup}>
-              <Text style={registerStyles.label}>
-                Prénom <Text style={registerStyles.stepNumber}>1/3</Text>
-              </Text>
+              <Text style={registerStyles.label}>Prénom <Text style={registerStyles.stepNumber}>1/4</Text></Text>
               <View style={registerStyles.inputContainer}>
                 <User size={20} color="#94a3b8" strokeWidth={2} />
                 <TextInput
@@ -125,20 +133,36 @@ const Register: React.FC = () => {
                   autoCorrect={false}
                   placeholderTextColor="#94a3b8"
                   returnKeyType="next"
-                  onSubmitEditing={() => emailRef.current?.focus()}
+                  editable={!isLoading}
+                  onSubmitEditing={() => pseudoRef.current?.focus()}
                 />
-                {firstName.length > 0 && (
-                  <View style={registerStyles.validationIcon}>
-                    <Text style={registerStyles.validationText}>✓</Text>
-                  </View>
-                )}
+                {firstName.length > 0 && <Text style={registerStyles.validationText}>✓</Text>}
               </View>
             </View>
 
             <View style={registerStyles.inputGroup}>
-              <Text style={registerStyles.label}>
-                Email <Text style={registerStyles.stepNumber}>2/3</Text>
-              </Text>
+              <Text style={registerStyles.label}>Pseudo <Text style={registerStyles.stepNumber}>2/4</Text></Text>
+              <View style={registerStyles.inputContainer}>
+                <User size={20} color="#94a3b8" strokeWidth={2} />
+                <TextInput
+                  ref={pseudoRef}
+                  style={registerStyles.input}
+                  placeholder="Votre pseudo"
+                  value={pseudo}
+                  onChangeText={setPseudo}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholderTextColor="#94a3b8"
+                  returnKeyType="next"
+                  editable={!isLoading}
+                  onSubmitEditing={() => emailRef.current?.focus()}
+                />
+                {pseudo.length > 0 && <Text style={registerStyles.validationText}>✓</Text>}
+              </View>
+            </View>
+
+            <View style={registerStyles.inputGroup}>
+              <Text style={registerStyles.label}>Email <Text style={registerStyles.stepNumber}>3/4</Text></Text>
               <View style={registerStyles.inputContainer}>
                 <Mail size={20} color="#94a3b8" strokeWidth={2} />
                 <TextInput
@@ -152,20 +176,15 @@ const Register: React.FC = () => {
                   autoCorrect={false}
                   placeholderTextColor="#94a3b8"
                   returnKeyType="next"
+                  editable={!isLoading}
                   onSubmitEditing={() => passwordRef.current?.focus()}
                 />
-                {email.includes('@') && email.includes('.') && (
-                  <View style={registerStyles.validationIcon}>
-                    <Text style={registerStyles.validationText}>✓</Text>
-                  </View>
-                )}
+                {email.includes('@') && email.includes('.') && <Text style={registerStyles.validationText}>✓</Text>}
               </View>
             </View>
 
             <View style={registerStyles.inputGroup}>
-              <Text style={registerStyles.label}>
-                Mot de passe <Text style={registerStyles.stepNumber}>3/3</Text>
-              </Text>
+              <Text style={registerStyles.label}>Mot de passe <Text style={registerStyles.stepNumber}>4/4</Text></Text>
               <View style={registerStyles.inputContainer}>
                 <Lock size={20} color="#94a3b8" strokeWidth={2} />
                 <TextInput
@@ -179,9 +198,10 @@ const Register: React.FC = () => {
                   autoCorrect={false}
                   placeholderTextColor="#94a3b8"
                   returnKeyType="done"
+                  editable={!isLoading}
                   onSubmitEditing={isFormComplete ? handleRegister : undefined}
                 />
-                <TouchableOpacity onPress={togglePasswordVisibility}>
+                <TouchableOpacity onPress={togglePasswordVisibility} disabled={isLoading}>
                   {showPassword ? (
                     <EyeOff size={20} color="#94a3b8" strokeWidth={2} />
                   ) : (
@@ -190,13 +210,11 @@ const Register: React.FC = () => {
                 </TouchableOpacity>
               </View>
               {password.length > 0 && password.length < 6 && (
-                <Text style={registerStyles.passwordHint}>
-                  Minimum 6 caractères requis
-                </Text>
+                <Text style={registerStyles.passwordHint}>Minimum 6 caractères requis</Text>
               )}
             </View>
 
-            {/* Récompenses à venir */}
+            {/* Récompenses */}
             <View style={registerStyles.rewardsPreview}>
               <Text style={registerStyles.rewardsTitle}>🎁 Vous allez recevoir :</Text>
               <View style={registerStyles.rewardsList}>
@@ -215,36 +233,31 @@ const Register: React.FC = () => {
               </View>
             </View>
 
-            {/* CTA Principal avec état dynamique */}
-            <TouchableOpacity 
-              style={[
-                registerStyles.registerButton,
-                isFormComplete && registerStyles.registerButtonReady
-              ]}
+            <TouchableOpacity
+              style={[registerStyles.registerButton, isFormComplete && registerStyles.registerButtonReady]}
               onPress={handleRegister}
               activeOpacity={0.9}
-              disabled={!isFormComplete}
+              disabled={!isFormComplete || isLoading}
             >
               <Text style={registerStyles.registerButtonText}>
-                {isFormComplete ? 'Créer mon compte et recevoir 1000€ 🎉' : 'Complétez votre profil'}
+                {isLoading ? 'Création du compte...' : 
+                 isFormComplete ? 'Créer mon compte et recevoir 1000€ 🎉' : 'Complétez votre profil (4/4)'}
               </Text>
-              {isFormComplete && (
-                <ArrowRight size={20} color="#ffffff" strokeWidth={2.5} />
-              )}
+              {isFormComplete && !isLoading && <ArrowRight size={20} color="#ffffff" strokeWidth={2.5} />}
             </TouchableOpacity>
           </View>
 
-          {/* Actions alternatives */}
+          {/* Lien de connexion */}
           <View style={registerStyles.alternativeActions}>
             <View style={registerStyles.socialProof}>
               <Text style={registerStyles.socialProofText}>
                 ⭐ Rejoint par +50,000 investisseurs passionnés
               </Text>
             </View>
-            
             <TouchableOpacity 
-              style={registerStyles.loginLink}
+              style={registerStyles.loginLink} 
               onPress={handleBackToLogin}
+              disabled={isLoading}
             >
               <Text style={registerStyles.loginLinkText}>
                 Déjà membre ? <Text style={registerStyles.loginLinkHighlight}>Se connecter</Text>

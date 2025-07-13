@@ -30,6 +30,7 @@ import {
   RefreshCw,
   AlertCircle
 } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { homeStyles } from '../styles/HomeStyle';
 import AssetDetails from '../components/AssetsDetails';
 import NewsReader from '../components/NewsReader';
@@ -47,6 +48,9 @@ const API_CONFIG = {
   NEWS_API: {
     key: '5cfe073c673a4d358b41ccd638ba6177',
     baseUrl: 'https://newsapi.org/v2'
+  },
+  BACKEND: {
+    baseUrl: 'http://192.168.1.73:5000'
   }
 };
 
@@ -86,9 +90,19 @@ interface AssetForDetails {
   type: 'crypto' | 'stocks' | 'forex';
 }
 
+interface UserData {
+  id: string;
+  firstName: string;
+  email: string;
+}
+
 const Home: React.FC = () => {
   const router = useRouter();
   const newsLoadingRef = useRef(false);
+  
+  // États pour l'utilisateur
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   
   // États pour la recherche
   const [searchQuery, setSearchQuery] = useState('');
@@ -123,6 +137,100 @@ const Home: React.FC = () => {
     { symbol: 'EURUSD', name: 'Euro / US Dollar', type: 'forex' as const, id: 'EURUSD' },
     { symbol: 'GBPUSD', name: 'British Pound / US Dollar', type: 'forex' as const, id: 'GBPUSD' },
   ];
+
+  // Fonction pour charger les données utilisateur
+  const loadUserData = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      const userId = await AsyncStorage.getItem('userId');
+
+      console.log('🔍 Tentative de chargement utilisateur - Token:', !!token, 'UserId:', userId);
+
+      if (!token || !userId) {
+        console.log('❌ Token ou userId manquant');
+        setIsAuthenticated(false);
+        return;
+      }
+
+      // Essayer d'abord l'endpoint profile s'il existe
+      let response;
+      try {
+        response = await fetch(`${API_CONFIG.BACKEND.baseUrl}/user/${userId}/profile`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      } catch (profileError) {
+        console.log('⚠️ Endpoint /profile non disponible, tentative avec endpoint alternatif');
+        // Si l'endpoint profile n'existe pas, essayer un endpoint alternatif
+        response = await fetch(`${API_CONFIG.BACKEND.baseUrl}/user/${userId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+
+      console.log('📡 Réponse API status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📦 Données reçues du backend:', data);
+        
+        // Gestion flexible de la structure des données
+        const userData = {
+          id: (data.id || data.user_id || userId).toString(),
+          firstName: data.pseudo || data.firstName || data.firstname || data.first_name || data.name || '',
+          email: data.email || ''
+        };
+        
+        console.log('✅ Données utilisateur formatées:', userData);
+        setUserData(userData);
+        setIsAuthenticated(true);
+      } else if (response.status === 404) {
+        console.log('⚠️ Endpoint utilisateur non trouvé, utilisation des données minimales');
+        // Si l'endpoint n'existe pas, utiliser les données minimales
+        setUserData({
+          id: userId,
+          firstName: '', // Sera rempli plus tard quand l'endpoint sera implémenté
+          email: ''
+        });
+        setIsAuthenticated(true);
+      } else if (response.status === 401) {
+        console.log('🚫 Token invalide ou expiré');
+        // Token invalide ou expiré
+        await AsyncStorage.removeItem('authToken');
+        await AsyncStorage.removeItem('userId');
+        setIsAuthenticated(false);
+      } else {
+        console.log('❌ Erreur API:', response.status, response.statusText);
+        // Autres erreurs - garder l'utilisateur connecté mais sans données
+        setUserData({
+          id: userId,
+          firstName: '',
+          email: ''
+        });
+        setIsAuthenticated(true);
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors du chargement des données utilisateur:', error);
+      // En cas d'erreur réseau, garder l'utilisateur connecté
+      const userId = await AsyncStorage.getItem('userId');
+      if (userId) {
+        setUserData({
+          id: userId,
+          firstName: '',
+          email: ''
+        });
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
+      }
+    }
+  }, []);
 
   // Interface pour les articles bruts de l'API
   interface RawNewsArticle {
@@ -429,6 +537,11 @@ const Home: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, performSearch]);
 
+  // Charger les données utilisateur au démarrage
+  useEffect(() => {
+    loadUserData();
+  }, [loadUserData]);
+
   // Charger les actualités au démarrage - UNE SEULE FOIS
   useEffect(() => {
     let mounted = true;
@@ -561,6 +674,19 @@ const Home: React.FC = () => {
     console.log('Navigation vers la boutique');
   };
 
+  // Fonction pour obtenir le message de salutation personnalisé
+  const getGreetingMessage = () => {
+    if (isAuthenticated === null) {
+      return 'Chargement...';
+    }
+    
+    if (isAuthenticated && userData?.firstName) {
+      return `Bonjour ${userData.firstName}`;
+    }
+    
+    return 'Bonjour';
+  };
+
   return (
     <View style={homeStyles.container}>
       <ScrollView 
@@ -572,7 +698,7 @@ const Home: React.FC = () => {
         {/* Header */}
         <View style={homeStyles.header}>
           <View style={homeStyles.greetingContainer}>
-            <Text style={homeStyles.greetingText}>Bonjour</Text>
+            <Text style={homeStyles.greetingText}>{getGreetingMessage()}</Text>
             <Text style={homeStyles.motivationText}>Prêt à investir aujourd'hui ?</Text>
           </View>
           <TouchableOpacity style={homeStyles.profileButton} onPress={handleViewProfile}>
